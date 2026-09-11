@@ -25,6 +25,7 @@
 
 - [`docs/dft_flow.md`](docs/dft_flow.md)：端到端 DFT 工作流和阶段门禁。
 - [`docs/dft_concepts.md`](docs/dft_concepts.md)：Scan Insertion 核心概念与诊断要点。
+- [`docs/dofile_mapping.md`](docs/dofile_mapping.md)：自然语言、公共模型、DFT 动作与 Dofile 的映射规范。
 - [`docs/dft_output.md`](docs/dft_output.md)：工具输出、交付物和验收标准。
 - [`docs/interfaces.md`](docs/interfaces.md)：模块边界和公共数据模型。
 
