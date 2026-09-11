@@ -1,0 +1,296 @@
+schema_version: "0.1.0"
+tool_family: "DFTEXP"
+command_syntax_status: "needs_official_reference"
+description: >-
+  Tool-neutral action catalog for translating CaseInput and TaskRequirement
+  into a validated DFTEXP dofile. A null command_template must never be
+  rendered or executed.
+
+generation_order:
+  - environment
+  - input
+  - design
+  - constraints
+  - signals
+  - internal_scan
+  - wrapper_scan
+  - pre_drc
+  - repair
+  - insertion
+  - post_drc
+  - reports
+  - deliverables
+  - verification
+
+actions:
+  - action_id: env.initialize
+    stage: environment
+    source_path: null
+    required_parameters: [tool_version]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "run log records the expected DFTEXP tool and version"
+
+  - action_id: input.load_library
+    stage: input
+    source_path: CaseInput.liberty_file
+    required_parameters: [liberty_file]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "no library parse or link error"
+
+  - action_id: input.load_netlist
+    stage: input
+    source_path: CaseInput.pre_scan_netlist
+    required_parameters: [pre_scan_netlist]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "design modules are available and parse errors are absent"
+
+  - action_id: design.select_top
+    stage: design
+    source_path: TaskRequirement.top_design
+    required_parameters: [top_design]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "run log confirms the requested top design"
+
+  - action_id: design.link
+    stage: design
+    source_path: null
+    required_parameters: [top_design]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "no unresolved design references"
+
+  - action_id: constraints.apply_limitations
+    stage: constraints
+    source_path: CaseInput.limitations
+    required_parameters: [limitations]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "protected objects are unchanged"
+
+  - action_id: signal.add_test_clock
+    stage: signals
+    source_path: TaskRequirement.test_clocks
+    required_parameters: [clock]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "clock report contains the requested clock"
+
+  - action_id: signal.set_clock_edge
+    stage: signals
+    source_path: TaskRequirement.internal_scan.edge_strategy
+    required_parameters: [clock, edge]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "reported clock edge matches the requirement"
+
+  - action_id: signal.add_reset
+    stage: signals
+    source_path: TaskRequirement.resets
+    required_parameters: [reset]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "reset is recognized by DFT checks"
+
+  - action_id: signal.add_scan_enable
+    stage: signals
+    source_path: TaskRequirement.scan_enable
+    required_parameters: [scan_enable]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "scan signal report maps the requested enable"
+
+  - action_id: scan.enable_internal
+    stage: internal_scan
+    source_path: TaskRequirement.internal_scan.enabled
+    required_parameters: [enabled]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "scan-cell population reflects the requested state"
+
+  - action_id: scan.set_chain_count
+    stage: internal_scan
+    source_path: TaskRequirement.internal_scan.chain_count
+    required_parameters: [chain_count]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "actual chain count equals chain_count"
+
+  - action_id: scan.set_chain_length
+    stage: internal_scan
+    source_path: TaskRequirement.internal_scan.chain_length
+    required_parameters: [chain_length]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "every chain satisfies the documented length rule"
+
+  - action_id: scan.assign_clock_domains
+    stage: internal_scan
+    source_path: TaskRequirement.internal_scan.clock_domains
+    required_parameters: [clock_domains]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "chain report assigns cells to the expected domains"
+
+  - action_id: scan.set_edge_strategy
+    stage: internal_scan
+    source_path: TaskRequirement.internal_scan.edge_strategy
+    required_parameters: [edge_strategy]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "scan ordering and edge transitions satisfy the strategy"
+
+  - action_id: scan.set_lockup_required
+    stage: internal_scan
+    source_path: TaskRequirement.internal_scan.lockup_required
+    required_parameters: [lockup_required]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "lockup use matches the explicit requirement"
+
+  - action_id: scan.set_lockup_strategy
+    stage: internal_scan
+    source_path: TaskRequirement.internal_scan.lockup_strategy
+    required_parameters: [lockup_strategy]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "lockups appear at the intended boundaries"
+
+  - action_id: scan.exclude_instances
+    stage: constraints
+    source_path: CaseInput.limitations
+    required_parameters: [instance_patterns]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "excluded instances are not replaced or stitched"
+
+  - action_id: wrapper.enable
+    stage: wrapper_scan
+    source_path: TaskRequirement.wrapper_scan.enabled
+    required_parameters: [enabled]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "wrapper analysis runs only when enabled"
+
+  - action_id: wrapper.set_scope
+    stage: wrapper_scan
+    source_path: TaskRequirement.wrapper_scan.scope
+    required_parameters: [scope]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "wrapper-cell population stays inside the requested scope"
+
+  - action_id: wrapper.set_control_signals
+    stage: wrapper_scan
+    source_path: TaskRequirement.wrapper_scan.control_signals
+    required_parameters: [control_signals]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "wrapper control signals are connected and reported"
+
+  - action_id: wrapper.set_cell_strategy
+    stage: wrapper_scan
+    source_path: TaskRequirement.wrapper_scan.wrapper_cell_strategy
+    required_parameters: [wrapper_cell_strategy]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "reported wrapper-cell types match the strategy"
+
+  - action_id: check.run_pre_drc
+    stage: pre_drc
+    source_path: null
+    required_parameters: []
+    command_template: null
+    command_status: needs_official_reference
+    validation: "pre-insertion DRC has no unresolved blocking violations"
+
+  - action_id: repair.apply_eco
+    stage: repair
+    source_path: IssueResolution.attempts
+    required_parameters: [issue_id, action, artifact_ref]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "the target violation is resolved without functional change"
+
+  - action_id: scan.replace_cells
+    stage: insertion
+    source_path: TaskRequirement.internal_scan
+    required_parameters: []
+    command_template: null
+    command_status: needs_official_reference
+    validation: "scan-cell report has no unexplained omissions"
+
+  - action_id: scan.stitch_chains
+    stage: insertion
+    source_path: TaskRequirement.internal_scan
+    required_parameters: []
+    command_template: null
+    command_status: needs_official_reference
+    validation: "no empty, broken, or floating scan chains"
+
+  - action_id: scan.insert
+    stage: insertion
+    source_path: TaskRequirement
+    required_parameters: []
+    command_template: null
+    command_status: needs_official_reference
+    validation: "a post-scan design is created"
+
+  - action_id: check.run_post_drc
+    stage: post_drc
+    source_path: null
+    required_parameters: []
+    command_template: null
+    command_status: needs_official_reference
+    validation: "post-insertion DRC has no new blocking violations"
+
+  - action_id: report.write_dft
+    stage: reports
+    source_path: TaskRequirement.output_requirements
+    required_parameters: [output_path]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "DFT report exists, is non-empty, and is parseable"
+
+  - action_id: report.write_scan_chains
+    stage: reports
+    source_path: TaskRequirement.output_requirements
+    required_parameters: [output_path]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "scan-chain report exposes count, lengths, domains, and lockups"
+
+  - action_id: output.write_netlist
+    stage: deliverables
+    source_path: TaskRequirement.output_requirements
+    required_parameters: [output_path]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "post-scan netlist exists, is non-empty, and contains the top"
+
+  - action_id: output.write_ctl
+    stage: deliverables
+    source_path: TaskRequirement.output_requirements
+    required_parameters: [output_path]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "CTL output exists and is accepted by its consumer"
+
+  - action_id: output.write_scandef
+    stage: deliverables
+    source_path: TaskRequirement.output_requirements
+    required_parameters: [output_path]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "SCANDEF contains all required chains and scan cells"
+
+  - action_id: verify.run_lec
+    stage: verification
+    source_path: TaskRequirement.output_requirements
+    required_parameters: [pre_scan_netlist, post_scan_netlist]
+    command_template: null
+    command_status: needs_official_reference
+    validation: "functional-mode equivalence passes"
