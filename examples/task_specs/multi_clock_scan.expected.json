@@ -1,0 +1,34 @@
+{
+  "top_design": "multi_clk_top",
+  "test_clocks": [
+    "clk_a",
+    "clk_b"
+  ],
+  "resets": [
+    "rst_n"
+  ],
+  "scan_enable": "scan_en",
+  "internal_scan": {
+    "enabled": true,
+    "chain_count": 4,
+    "chain_length": null,
+    "clock_domains": [
+      "clk_a",
+      "clk_b"
+    ],
+    "edge_strategy": null,
+    "lockup_required": true,
+    "lockup_strategy": null
+  },
+  "wrapper_scan": {
+    "enabled": false,
+    "scope": [],
+    "control_signals": [],
+    "wrapper_cell_strategy": null
+  },
+  "output_requirements": [
+    "post_scan_netlist",
+    "scan_report"
+  ],
+  "unresolved_requirements": []
+}
