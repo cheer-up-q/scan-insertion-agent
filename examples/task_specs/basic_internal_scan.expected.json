@@ -1,0 +1,31 @@
+{
+  "top_design": "chip_top",
+  "test_clocks": [
+    "test_clk"
+  ],
+  "resets": [
+    "rst_n"
+  ],
+  "scan_enable": "scan_en",
+  "internal_scan": {
+    "enabled": true,
+    "chain_count": 8,
+    "chain_length": null,
+    "clock_domains": [],
+    "edge_strategy": "rising",
+    "lockup_required": null,
+    "lockup_strategy": null
+  },
+  "wrapper_scan": {
+    "enabled": false,
+    "scope": [],
+    "control_signals": [],
+    "wrapper_cell_strategy": null
+  },
+  "output_requirements": [
+    "post_scan_netlist",
+    "ctl",
+    "scandef"
+  ],
+  "unresolved_requirements": []
+}
