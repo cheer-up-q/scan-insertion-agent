@@ -7,6 +7,9 @@
 - 已建立 Python 项目骨架和公共 Pydantic 数据契约。
 - 已建立 DFT 流程、核心概念、输出要求和接口说明文档。
 - Agent、Runtime、诊断与修复模块仍在后续分支中实现。
+- Task Parser 的实现位于 `feature/task-parser`，**尚未合入 `dev`**；`dev` 上的
+  `src/task_parser/` 仅有空的 `__init__.py`。`dev` 当前可用测试为
+  `tests/test_contracts.py` 与 `tests/test_task_spec_fixtures.py`。
 
 ## 目录结构
 

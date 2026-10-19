@@ -688,6 +688,10 @@ internal_scan.chain_length
 }
 ```
 
+`docs/dofile_mapping.md` §6.1 中的 `scan_cell_count <= chain_count × chain_length`
+只是生成前的容量预检，不构成长度验收；长度验收必须逐链比对，见
+`docs/dft_output.md` §5.2。两处表述以本节为准。
+
 ### 8.6 Balance Requirement Example
 
 用户描述：
@@ -1054,6 +1058,14 @@ Wrapper 控制信号为 wrapper_en。
 - `wrapper_cell_strategy` 只有在任务或工具规范明确给出策略时才赋值。
 - 不得根据模块名称或 IO 数量自行决定 Wrapper Scope。
 - 如果任务要求 Wrapper Scan，但具体范围需要设计分析确定，应将该要求记录到 `unresolved_requirements`。
+- **显式禁用优先**：`不启用`、`不使用`、`禁用`、`关闭`、`无需`、`不需要 Wrapper Scan`
+  一律映射为 `enabled=false`，不得因为同一文本中又出现 scope、control signal 或
+  strategy 而改回 `true`。
+- 如果同一文本同时给出显式禁用和启用证据（例如“不启用 Wrapper Scan”与
+  “Wrapper 控制信号为 wrp_en”），必须保留 `enabled=false`，并把矛盾写入
+  `unresolved_requirements`，不得静默选择启用。
+- `scope`、`control_signals`、`wrapper_cell_strategy` 只有在没有显式禁用时才可
+  作为启用证据。
 
 例如：
 
@@ -1096,6 +1108,10 @@ dft_report
 wrapper_report
 ```
 
+当前标准值**不包含 LEC**。任务明确要求 LEC 时，应记录到
+`unresolved_requirements`，不得用 `dft_report` 冒充；是否新增 `lec_report`
+属于公共接口变更，需按 `docs/interfaces.md` §9 的流程确认。
+
 ### 13.3 Example
 
 用户描述：
@@ -1123,6 +1139,8 @@ wrapper_report
 - `task_spec.md` 明确要求的输出必须全部保留。
 - 如果任务未明确列出某类报告，不得仅为了补全列表而自行添加。
 - Runtime 最终真实输出目录仍应遵循比赛规定，`output_requirements` 主要用于表示任务需求。
+- `output_requirements` 的标准值到 `ToolRunResult.reports` / `.deliverables` 键的转换，
+  只允许使用 `docs/interfaces.md` §7.1 的映射表，不得在 Agent 侧自行改名。
 
 ---
 

@@ -1,10 +1,78 @@
-schema_version: "0.1.0"
+schema_version: "0.2.0"
 tool_family: "DFTEXP"
 command_syntax_status: "needs_official_reference"
 description: >-
   Tool-neutral action catalog for translating CaseInput and TaskRequirement
   into a validated DFTEXP dofile. A null command_template must never be
-  rendered or executed.
+  rendered or executed. v0.2 adds a typed parameter registry and optional
+  preconditions, dependencies, mutual-exclusion rules, and structured
+  validators for the critical path. Actions without these fields remain
+  catalog entries whose relations are not frozen yet.
+
+parameter_types:
+  tool_version:
+    type: string
+    description: Official DFTEXP version string.
+  liberty_file:
+    type: path
+  pre_scan_netlist:
+    type: path
+  post_scan_netlist:
+    type: path
+  top_design:
+    type: identifier
+  limitations:
+    type: path
+  clock:
+    type: identifier
+  edge:
+    type: enum
+    values: [rising, falling, mixed]
+  reset:
+    type: identifier
+  polarity:
+    type: enum
+    values: [active_high, active_low]
+  signal:
+    type: identifier
+  value:
+    type: string
+  scan_enable:
+    type: identifier
+  enabled:
+    type: boolean
+  chain_count:
+    type: integer
+    minimum: 1
+  chain_length:
+    type: integer
+    minimum: 1
+    semantics: exact_fixed_length
+  clock_domains:
+    type: list[identifier]
+  edge_strategy:
+    type: enum
+    values: [rising, falling, mixed]
+  lockup_required:
+    type: boolean
+  lockup_strategy:
+    type: string
+  instance_patterns:
+    type: list[string]
+  scope:
+    type: list[identifier]
+  control_signals:
+    type: list[identifier]
+  wrapper_cell_strategy:
+    type: string
+  issue_id:
+    type: string
+  action:
+    type: string
+  artifact_ref:
+    type: list[path]
+  output_path:
+    type: path
 
 generation_order:
   - environment
@@ -21,6 +89,13 @@ generation_order:
   - reports
   - deliverables
   - verification
+
+selection_rules:
+  - stage: insertion
+    rule: >-
+      Emit either scan.insert, or the ordered pair
+      (scan.replace_cells -> scan.stitch_chains). Never emit scan.insert
+      together with either granular action in the same run.
 
 actions:
   - action_id: env.initialize
@@ -61,6 +136,7 @@ actions:
     required_parameters: [top_design]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [design.select_top, input.load_library, input.load_netlist]
     validation: "no unresolved design references"
 
   - action_id: constraints.apply_limitations
@@ -69,6 +145,9 @@ actions:
     required_parameters: [limitations]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [design.link]
+    preconditions:
+      - "CaseInput.limitations has been read as text before action generation"
     validation: "protected objects are unchanged"
 
   - action_id: signal.add_test_clock
@@ -77,6 +156,7 @@ actions:
     required_parameters: [clock]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [design.link]
     validation: "clock report contains the requested clock"
 
   - action_id: signal.set_clock_edge
@@ -85,6 +165,12 @@ actions:
     required_parameters: [clock, edge]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [signal.add_test_clock]
+    preconditions:
+      - "edge_strategy is one of rising, falling, mixed"
+    validator:
+      report_key: scan_chains
+      assertion: "reported clock edge matches edge_strategy"
     validation: "reported clock edge matches the requirement"
 
   - action_id: signal.add_reset
@@ -93,7 +179,20 @@ actions:
     required_parameters: [reset]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [design.link]
     validation: "reset is recognized by DFT checks"
+
+  - action_id: signal.set_reset_polarity
+    stage: signals
+    source_path: null
+    required_parameters: [reset, polarity]
+    command_template: null
+    command_status: needs_official_reference
+    depends_on: [signal.add_reset]
+    preconditions:
+      - "reset polarity is explicit in task_spec.md or limitations.md"
+      - "TaskRequirement has no dedicated polarity field; the original sentence is in unresolved_requirements"
+    validation: "reported reset polarity matches the explicit requirement"
 
   - action_id: signal.add_scan_enable
     stage: signals
@@ -101,7 +200,20 @@ actions:
     required_parameters: [scan_enable]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [design.link]
     validation: "scan signal report maps the requested enable"
+
+  - action_id: signal.add_test_mode
+    stage: signals
+    source_path: null
+    required_parameters: [signal, value]
+    command_template: null
+    command_status: needs_official_reference
+    depends_on: [design.link]
+    preconditions:
+      - "test mode is explicit in task_spec.md or limitations.md"
+      - "TaskRequirement has no dedicated test_mode field; the original sentence is in unresolved_requirements"
+    validation: "mode report matches the explicit test-mode requirement"
 
   - action_id: scan.enable_internal
     stage: internal_scan
@@ -109,6 +221,7 @@ actions:
     required_parameters: [enabled]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [constraints.apply_limitations]
     validation: "scan-cell population reflects the requested state"
 
   - action_id: scan.set_chain_count
@@ -117,6 +230,13 @@ actions:
     required_parameters: [chain_count]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [scan.enable_internal]
+    preconditions:
+      - "internal_scan.enabled == true"
+      - "chain_count is not null"
+    validator:
+      report_key: scan_chains
+      assertion: "actual_chain_count == chain_count"
     validation: "actual chain count equals chain_count"
 
   - action_id: scan.set_chain_length
@@ -125,7 +245,14 @@ actions:
     required_parameters: [chain_length]
     command_template: null
     command_status: needs_official_reference
-    validation: "every chain satisfies the documented length rule"
+    depends_on: [scan.enable_internal]
+    preconditions:
+      - "internal_scan.enabled == true"
+      - "chain_length is not null and means exact fixed length"
+    validator:
+      report_key: scan_chains
+      assertion: "every_chain_length == chain_length"
+    validation: "every chain length equals the fixed chain_length"
 
   - action_id: scan.assign_clock_domains
     stage: internal_scan
@@ -133,6 +260,7 @@ actions:
     required_parameters: [clock_domains]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [signal.add_test_clock]
     validation: "chain report assigns cells to the expected domains"
 
   - action_id: scan.set_edge_strategy
@@ -141,7 +269,13 @@ actions:
     required_parameters: [edge_strategy]
     command_template: null
     command_status: needs_official_reference
-    validation: "scan ordering and edge transitions satisfy the strategy"
+    depends_on: [signal.set_clock_edge]
+    preconditions:
+      - "edge_strategy is one of rising, falling, mixed"
+    validator:
+      report_key: scan_chains
+      assertion: "reported chain edge matches edge_strategy"
+    validation: "chain edge matches the requested strategy"
 
   - action_id: scan.set_lockup_required
     stage: internal_scan
@@ -149,6 +283,7 @@ actions:
     required_parameters: [lockup_required]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [scan.assign_clock_domains]
     validation: "lockup use matches the explicit requirement"
 
   - action_id: scan.set_lockup_strategy
@@ -157,6 +292,7 @@ actions:
     required_parameters: [lockup_strategy]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [scan.set_lockup_required]
     validation: "lockups appear at the intended boundaries"
 
   - action_id: scan.exclude_instances
@@ -165,6 +301,7 @@ actions:
     required_parameters: [instance_patterns]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [constraints.apply_limitations]
     validation: "excluded instances are not replaced or stitched"
 
   - action_id: wrapper.enable
@@ -173,6 +310,11 @@ actions:
     required_parameters: [enabled]
     command_template: null
     command_status: needs_official_reference
+    preconditions:
+      - "explicit disable takes precedence over scope, control signals, and strategy"
+    validator:
+      report_key: wrapper_report
+      assertion: "wrapper_enabled == wrapper_scan.enabled"
     validation: "wrapper analysis runs only when enabled"
 
   - action_id: wrapper.set_scope
@@ -181,6 +323,13 @@ actions:
     required_parameters: [scope]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [wrapper.enable]
+    preconditions:
+      - "wrapper_scan.enabled == true"
+      - "scope is not empty; otherwise the requirement stays unresolved"
+    validator:
+      report_key: wrapper_report
+      assertion: "wrapper_cell_scope == wrapper_scan.scope"
     validation: "wrapper-cell population stays inside the requested scope"
 
   - action_id: wrapper.set_control_signals
@@ -189,6 +338,9 @@ actions:
     required_parameters: [control_signals]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [wrapper.enable]
+    preconditions:
+      - "wrapper_scan.enabled == true"
     validation: "wrapper control signals are connected and reported"
 
   - action_id: wrapper.set_cell_strategy
@@ -197,6 +349,9 @@ actions:
     required_parameters: [wrapper_cell_strategy]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [wrapper.enable]
+    preconditions:
+      - "wrapper_scan.enabled == true"
     validation: "reported wrapper-cell types match the strategy"
 
   - action_id: check.run_pre_drc
@@ -205,6 +360,7 @@ actions:
     required_parameters: []
     command_template: null
     command_status: needs_official_reference
+    depends_on: [scan.enable_internal]
     validation: "pre-insertion DRC has no unresolved blocking violations"
 
   - action_id: repair.apply_eco
@@ -213,6 +369,7 @@ actions:
     required_parameters: [issue_id, action, artifact_ref]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [check.run_pre_drc]
     validation: "the target violation is resolved without functional change"
 
   - action_id: scan.replace_cells
@@ -221,6 +378,8 @@ actions:
     required_parameters: []
     command_template: null
     command_status: needs_official_reference
+    depends_on: [check.run_pre_drc]
+    mutually_exclusive_with: [scan.insert]
     validation: "scan-cell report has no unexplained omissions"
 
   - action_id: scan.stitch_chains
@@ -229,6 +388,8 @@ actions:
     required_parameters: []
     command_template: null
     command_status: needs_official_reference
+    depends_on: [scan.replace_cells]
+    mutually_exclusive_with: [scan.insert]
     validation: "no empty, broken, or floating scan chains"
 
   - action_id: scan.insert
@@ -237,6 +398,8 @@ actions:
     required_parameters: []
     command_template: null
     command_status: needs_official_reference
+    depends_on: [check.run_pre_drc]
+    mutually_exclusive_with: [scan.replace_cells, scan.stitch_chains]
     validation: "a post-scan design is created"
 
   - action_id: check.run_post_drc
@@ -245,6 +408,9 @@ actions:
     required_parameters: []
     command_template: null
     command_status: needs_official_reference
+    depends_on_any:
+      - [scan.insert]
+      - [scan.replace_cells, scan.stitch_chains]
     validation: "post-insertion DRC has no new blocking violations"
 
   - action_id: report.write_dft
@@ -253,6 +419,7 @@ actions:
     required_parameters: [output_path]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [check.run_post_drc]
     validation: "DFT report exists, is non-empty, and is parseable"
 
   - action_id: report.write_scan_chains
@@ -261,7 +428,25 @@ actions:
     required_parameters: [output_path]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [check.run_post_drc]
+    validator:
+      report_key: scan_chains
+      assertion: "count, per-chain lengths, domains, and lockups are extractable"
     validation: "scan-chain report exposes count, lengths, domains, and lockups"
+
+  - action_id: report.write_wrapper
+    stage: reports
+    source_path: TaskRequirement.output_requirements
+    required_parameters: [output_path]
+    command_template: null
+    command_status: needs_official_reference
+    depends_on: [wrapper.enable]
+    preconditions:
+      - "wrapper_scan.enabled == true"
+    validator:
+      report_key: wrapper_report
+      assertion: "scope and control signals are extractable"
+    validation: "wrapper report exists, is non-empty, and exposes scope and control signals"
 
   - action_id: output.write_netlist
     stage: deliverables
@@ -269,6 +454,7 @@ actions:
     required_parameters: [output_path]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [check.run_post_drc]
     validation: "post-scan netlist exists, is non-empty, and contains the top"
 
   - action_id: output.write_ctl
@@ -277,6 +463,7 @@ actions:
     required_parameters: [output_path]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [check.run_post_drc]
     validation: "CTL output exists and is accepted by its consumer"
 
   - action_id: output.write_scandef
@@ -285,6 +472,7 @@ actions:
     required_parameters: [output_path]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [check.run_post_drc]
     validation: "SCANDEF contains all required chains and scan cells"
 
   - action_id: verify.run_lec
@@ -293,4 +481,5 @@ actions:
     required_parameters: [pre_scan_netlist, post_scan_netlist]
     command_template: null
     command_status: needs_official_reference
+    depends_on: [output.write_netlist]
     validation: "functional-mode equivalence passes"
