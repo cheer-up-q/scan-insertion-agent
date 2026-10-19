@@ -147,9 +147,10 @@ def _parse_names(fragment: Optional[str]) -> List[str]:
 
 def _first_match(patterns: Sequence[re.Pattern], text: str) -> Optional[str]:
     for pattern in patterns:
-        match = pattern.search(text)
-        if match:
-            return match.group(1)
+        for match in pattern.finditer(text):
+            value = match.group(1).strip()
+            if value:
+                return value
     return None
 
 
@@ -183,6 +184,12 @@ _TOP_DESIGN_PATTERNS = (
 
 _TEST_CLOCK_PATTERNS = (
     re.compile(
+        r"([A-Za-z_][A-Za-z0-9_$]*(?:\s*(?:、|,|，|和|与|及|以及|and)\s*"
+        r"[A-Za-z_][A-Za-z0-9_$]*)*)\s*(?:均|都)?\s*作为\s*"
+        r"(?:测试时钟|测试\s*Clock|Scan\s*Clock)",
+        re.IGNORECASE,
+    ),
+    re.compile(
         r"(?:测试时钟|测试\s*Clock|Scan\s*Clock)\s*"
         r"(?:为|是|包括|包含|使用|采用|有|设置为|设为)?\s*([^。；;\n]+)",
         re.IGNORECASE,
@@ -196,6 +203,12 @@ _TEST_CLOCK_PATTERNS = (
 
 _RESET_PATTERNS = (
     re.compile(
+        r"([A-Za-z_][A-Za-z0-9_$]*(?:\s*(?:、|,|，|和|与|及|以及|and)\s*"
+        r"[A-Za-z_][A-Za-z0-9_$]*)*)\s*(?:均|都)?\s*作为\s*"
+        r"(?:复位信号|复位控制|Reset)",
+        re.IGNORECASE,
+    ),
+    re.compile(
         r"(?:复位信号|复位控制|Reset)\s*"
         r"(?:为|是|包括|包含|使用|采用|有|设置为|设为)?\s*([^。；;\n]+)",
         re.IGNORECASE,
@@ -208,6 +221,11 @@ _RESET_PATTERNS = (
 )
 
 _SCAN_ENABLE_PATTERNS = (
+    re.compile(
+        r"([A-Za-z_][A-Za-z0-9_$]*)\s*(?:均|都)?\s*作为\s*"
+        r"(?:Scan\s*Enable|扫描使能(?:信号)?)",
+        re.IGNORECASE,
+    ),
     re.compile(
         r"(?:Scan\s*Enable|扫描使能信号|扫描使能|测试使能)\s*"
         r"(?:为|是|使用|采用|设置为|设为)?\s*[`'\"]?([A-Za-z_][A-Za-z0-9_$]*)",
@@ -282,6 +300,15 @@ _WRAPPER_SCOPE_PATTERNS = (
     re.compile(
         r"Wrapper(?:\s*Scan)?\s*(?:范围|作用范围|Scope)\s*"
         r"(?:为|是|包括|包含|使用)?\s*([^。；;\n]+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"对\s*([A-Za-z_][A-Za-z0-9_$]*(?:\s*(?:、|,|，|和|与|及|以及|and)\s*"
+        r"[A-Za-z_][A-Za-z0-9_$]*)*)\s*(?:启用|开启|使用)\s*Wrapper(?:\s*Scan)?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"Wrapper(?:\s*Scan)?\s*(?:作用|应用)\s*(?:于|到)\s*([^。；;\n]+)",
         re.IGNORECASE,
     ),
 )
