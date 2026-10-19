@@ -4,6 +4,8 @@
 
 本文定义一次工具运行应保存什么，以及最终结果如何判定。实际文件名可由 Runtime 或官方工具调整，但必须通过 `ToolRunResult` 建立稳定映射。
 
+`reports` 和 `deliverables` 的键名以 `docs/interfaces.md` §7.1 为唯一真源；本文示例使用 `scan_chains`、`dft_drc` 等 Runtime 键，不得改用需求侧的 `scan_report`。
+
 ## 1. 输出分层
 
 输出分为三类：

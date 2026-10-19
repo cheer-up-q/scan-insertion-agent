@@ -21,7 +21,7 @@ scan_in → scan cell 0 → scan cell 1 → ... → scan cell N → scan_out
 Scan chain 是串联的 scan cells 集合。常见约束包括：
 
 - `chain_count`：期望链数；
-- `chain_length`：目标或最大链长；
+- `chain_length`：固定链长；最大、目标或均衡链长属于未决要求，不得写入该字段；
 - 链的输入/输出端口；
 - 是否允许跨时钟域或跨边沿混合；
 - 链长平衡策略。

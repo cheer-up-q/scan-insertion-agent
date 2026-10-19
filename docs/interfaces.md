@@ -107,9 +107,9 @@ Owner：B / Agent
 | --- | --- | --- | --- |
 | `enabled` | `bool` | `true` | 是否启用 internal scan |
 | `chain_count` | `int \| null` | `null` | 若给出，必须大于 0 |
-| `chain_length` | `int \| null` | `null` | 若给出，必须大于 0 |
+| `chain_length` | `int \| null` | `null` | 固定链长；若给出，必须大于 0。最大/目标/均衡长度不得写入本字段 |
 | `clock_domains` | `list[str]` | `[]` | 目标时钟域 |
-| `edge_strategy` | `str \| null` | `null` | 边沿/排序策略 |
+| `edge_strategy` | `str \| null` | `null` | 时钟有效边沿：`rising` / `falling` / `mixed` |
 | `lockup_required` | `bool \| null` | `null` | 是否要求 lockup |
 | `lockup_strategy` | `str \| null` | `null` | lockup 策略 |
 
@@ -135,7 +135,7 @@ Owner：B / Agent
     "chain_count": 8,
     "chain_length": null,
     "clock_domains": ["test_clk"],
-    "edge_strategy": "same_edge",
+    "edge_strategy": "rising",
     "lockup_required": false,
     "lockup_strategy": null
   },
@@ -145,7 +145,7 @@ Owner：B / Agent
     "control_signals": [],
     "wrapper_cell_strategy": null
   },
-  "output_requirements": ["post_scan_netlist", "scan_chain_report"],
+  "output_requirements": ["post_scan_netlist", "scan_report"],
   "unresolved_requirements": []
 }
 ```
@@ -224,9 +224,61 @@ Owner：B 负责诊断与决策；C 负责持久化和审计。
 
 - 模块间优先传递模型实例；落盘时使用 JSON。
 - 字段名保持与 Pydantic 模型一致，不另设别名。
-- 路径应统一相对于 case 工作目录或项目根目录；同一对象中不得混用无说明的路径基准。
-- `reports` 和 `deliverables` 的 key 应稳定，例如 `dft_drc`、`scan_chains`、`post_scan_netlist`、`final_dofile`。
+- 路径由 Runtime 统一解析：提交给下游模块前，必须把 `input_dir`、`task_spec`、`limitations`、`pre_scan_netlist`、`liberty_file` 全部转成绝对路径。同一 case 从不同 cwd 启动必须得到相同结果。
+- `reports` 和 `deliverables` 的 key 必须取自 §7.1，不得自造键名。
 - 可选字段使用 `null` 表示未知或不适用，不用空字符串代替。
+
+### 7.1 输出键唯一真源
+
+需求侧（`TaskRequirement.output_requirements`）与 Runtime 侧（`ToolRunResult.reports`
+/ `.deliverables`）使用不同的键空间，不得混用。只允许以下映射：
+
+| 需求侧标准值 | Runtime 键 | 槽位 | 生产者 |
+| --- | --- | --- | --- |
+| `post_scan_netlist` | `post_scan_netlist` | `deliverables` | Runtime |
+| `scan_report` | `scan_chains` | `reports` | Runtime |
+| `dft_report` | `dft_drc` | `reports` | Runtime |
+| `wrapper_report` | `wrapper_report` | `reports` | Runtime |
+| `ctl` | `ctl` | `deliverables` | Runtime |
+| `scandef` | `scandef` | `deliverables` | Runtime |
+
+规则：
+
+- 左列是 `docs/task_requirement_mapping.md` §13.2 在当前版本定义的六个标准值，不得增加或改写；新增值按 §9 的接口变更流程处理（见 §7.3 的 LEC 待决策项）。
+- 右列是 `docs/dft_output.md` §3 使用的键。Runtime 只接受右列列出的键；
+  任何其他写法（包括把需求侧标准值直接当 Runtime 键）必须报错。
+- 转换由 **Runtime** 在构造 `ToolRunResult` 时完成；Agent 不得读取 Runtime 键后自行改名。
+- 未知键必须报错；任务要求的标准值在 `reports` / `deliverables` 中找不到落点时，
+  必须写入 `ToolError`，不得因为进程退出码为 0 就当作成功。
+- `exit_status=completed` 只表示进程结束，不代表验收通过。
+
+### 7.2 `limitations` 转换链
+
+`CaseInput.limitations` 是路径，不是已解析的约束。转换责任必须固定为：
+
+| 阶段 | 责任模块 | 输入 | 输出 |
+| --- | --- | --- | --- |
+| 1. 读取 | Runtime / C | `CaseInput.limitations` 路径 | 原始文本 + 绝对路径，写入 run metadata |
+| 2. 冲突识别 | Parser / B | `task_spec` 文本 + `limitations` 文本 | 冲突项写入 `unresolved_requirements` |
+| 3. 动作映射 | Agent / A | 冲突项与限制类别 | `constraints.apply_limitations`、`scan.exclude_instances` 的参数 |
+| 4. 执行与取证 | Runtime / C | 动作参数 | Dofile 片段、保护/排除集合及执行证据 |
+
+规则：
+
+- 保护模块、排除实例、禁止修改的信号定义必须有明确落点，不能只检查
+  `scan_enable` / `test_clocks` / `resets` 三类信号冲突。
+- 当前 Parser 只覆盖上述三类信号，属于已知缺口；未覆盖的限制不得静默丢弃，
+  必须保留原文并在 `unresolved_requirements` 中标记。
+- `unresolved_requirements` 当前是 `list[str]`，无法结构化保存原句、数值和来源。
+  若下游需要这些字段，应按 §9 提出公共接口变更，不得由单个模块私改合同。
+
+### 7.3 未落点与待决策项
+
+- `TaskRequirement` 当前没有 `lec` 输出标准值。任务要求 LEC 时必须写入
+  `unresolved_requirements`，不得用 `dft_report` 冒充；是否新增 `lec_report`
+  属于接口变更，需 B/C 确认。
+- reset 极性、`test_mode` 当前无独立模型字段，只能保留原文并标记未决；
+  动作目录已登记 `signal.set_reset_polarity` / `signal.add_test_mode`。
 
 ## 8. 错误处理约定
 

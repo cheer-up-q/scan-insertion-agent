@@ -50,37 +50,44 @@ ToolRunResult + 验收证据
 
 ## 3. Dofile Action IR
 
-每个动作使用以下逻辑结构：
+`schema_version: 0.2.0` 的动作目录使用**扁平结构**，与实际 `schemas/dofile_actions.yaml` 一致：
 
 ```yaml
-action_id: scan.set_chain_count
-source:
-  model: TaskRequirement
-  path: internal_scan.chain_count
-parameters:
-  chain_count: 8
-preconditions:
-  - internal_scan.enabled == true
-command:
-  vendor: DFTEXP
-  template: null
-  status: needs_official_reference
-validation:
-  report_key: scan_chains
-  assertion: actual_chain_count == 8
+- action_id: scan.set_chain_count
+  stage: internal_scan
+  source_path: TaskRequirement.internal_scan.chain_count
+  required_parameters: [chain_count]
+  command_template: null
+  command_status: needs_official_reference
+  depends_on: [scan.enable_internal]
+  preconditions:
+    - internal_scan.enabled == true
+    - chain_count is not null
+  validator:
+    report_key: scan_chains
+    assertion: actual_chain_count == chain_count
+  validation: "actual chain count equals chain_count"
 ```
 
 字段含义：
 
-| 字段 | 说明 |
-| --- | --- |
-| `action_id` | 工具无关的稳定动作编号 |
-| `source` | 参数来自哪个公共模型字段 |
-| `parameters` | 渲染 Dofile 所需参数 |
-| `preconditions` | 执行前必须满足的条件 |
-| `command.template` | 经官方资料核验的 DFTEXP 命令模板 |
-| `command.status` | `verified` 或 `needs_official_reference` |
-| `validation` | 运行后使用什么证据判断动作生效 |
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `parameter_types`（顶层） | 是 | 参数名到类型的注册表；`required_parameters` 中的每个名字必须在此登记 |
+| `action_id` | 是 | 工具无关的稳定动作编号 |
+| `stage` | 是 | 所属阶段，必须出现在 `generation_order` 中 |
+| `source_path` | 是 | 参数来自哪个公共模型字段；`null` 表示当前模型无对应字段，要求必须保留在 `unresolved_requirements` |
+| `required_parameters` | 是 | 渲染 Dofile 必需的参数名 |
+| `command_template` | 是 | 经官方资料核验的 DFTEXP 命令模板；当前全部为 `null` |
+| `command_status` | 是 | `verified` 或 `needs_official_reference` |
+| `depends_on` | 否 | 必须先完成的动作（AND） |
+| `depends_on_any` | 否 | 多组可选前置序列（OR），例如复合入口与分步入口 |
+| `mutually_exclusive_with` | 否 | 同一次运行不得同时出现的动作 |
+| `preconditions` | 否 | 执行前必须满足的条件 |
+| `validator` | 否 | 结构化验证目标 `{report_key, assertion}` |
+| `validation` | 是 | 人类可读的验收说明 |
+
+未声明 `depends_on` / `preconditions` 的动作表示**关系尚未冻结**，不表示没有依赖。`schema_version: 0.2.0` 仍不包含动作实例：具体参数值由 Agent 在生成 Dofile 时填充，`null` 模板永远不得渲染或执行。
 
 ## 4. 固定动作顺序
 
@@ -127,7 +134,7 @@ validation:
 | `signal.add_scan_enable` | scan enable 使用 SE | `scan_enable` | signal object | 声明 scan enable | scan signal report 映射正确 |
 | `signal.add_test_mode` | test_mode 控制测试模式 | 当前无独立字段 | signal/value | 声明 test mode | 模式报告与任务一致 |
 
-对公共模型尚无独立字段的要求，不得丢弃：原文保留到 `unresolved_requirements`，由 Agent 生成显式待决策项。
+对公共模型尚无独立字段的要求，不得丢弃：原文保留到 `unresolved_requirements`，由 Agent 生成显式待决策项。对应动作 `signal.set_reset_polarity`、`signal.add_test_mode` 已在动作目录中登记，但其 `source_path` 仍为 `null`，在接口扩展前不得由单个模块私自补字段。
 
 ### 5.3 Internal Scan
 
@@ -135,9 +142,9 @@ validation:
 | --- | --- | --- | --- | --- | --- |
 | `scan.enable_internal` | 启用内部扫描 | `internal_scan.enabled` | enabled | 开关 internal scan | scan cell population 符合预期 |
 | `scan.set_chain_count` | 建立 8 条扫描链 | `internal_scan.chain_count` | positive integer | 设置目标链数 | actual chain count 等于要求 |
-| `scan.set_chain_length` | 最大链长 500 | `internal_scan.chain_length` | positive integer | 设置链长目标/上限 | 每条链长度满足定义 |
+| `scan.set_chain_length` | 每条 Scan Chain 长度固定为 500 | `internal_scan.chain_length` | positive integer | 设置固定链长 | 每条链的实际长度等于 `chain_length`；任一条不等即失败 |
 | `scan.assign_clock_domains` | 按 clk_a/clk_b 分域 | `internal_scan.clock_domains[]` | domain list | 建立 scan clock domains | chain report 域归属正确 |
-| `scan.set_edge_strategy` | 同边沿单元成链 | `internal_scan.edge_strategy` | strategy | 设置边沿混合/排序策略 | 相邻单元边沿符合策略 |
+| `scan.set_edge_strategy` | 所有扫描链使用上升沿触发 | `internal_scan.edge_strategy` | `rising` / `falling` / `mixed` | 设置时钟有效边沿 | 链报告中的触发边沿与取值一致 |
 | `scan.set_lockup_required` | 跨域必须插 lockup | `internal_scan.lockup_required` | boolean | 启用/禁止 lockup | 报告中的 lockup 数量和位置合理 |
 | `scan.set_lockup_strategy` | 在跨域边界插入 lockup | `internal_scan.lockup_strategy` | strategy | 设置 lockup 策略 | 跨域边界得到保护 |
 | `scan.exclude_instances` | 模块 X 不参与插链 | `CaseInput.limitations` | object patterns | 建立 non-scan/exclude 列表 | 排除对象未被替换或串接 |
@@ -163,19 +170,43 @@ validation:
 | `check.run_post_drc` | 插链后再次检查 | 流程固定动作 | phase=post | 运行 post-insertion DRC | 无新关键违规 |
 | `report.write_dft` | 输出 DFT 报告 | `output_requirements[]` | output path | 写 DFT/DRC 报告 | 文件存在、非空、可解析 |
 | `report.write_scan_chains` | 输出链报告 | `output_requirements[]` | output path | 写 scan-chain report | 链数、链长、域和 lockup 可提取 |
+| `report.write_wrapper` | 输出 Wrapper 报告 | `output_requirements[]` | output path | 写 wrapper report | 文件存在、非空、可解析；范围与控制信号可提取 |
 | `output.write_netlist` | 输出 post-scan 网表 | `output_requirements[]` | output path | 写插链后 netlist | 文件非空、顶层可解析 |
 | `output.write_ctl` | 输出 CTL | `output_requirements[]` | output path | 写测试控制数据 | 文件存在且下游可读取 |
 | `output.write_scandef` | 输出 SCANDEF | `output_requirements[]` | output path | 写物理链数据 | 链/单元记录完整 |
 | `verify.run_lec` | 验证功能未改变 | `output_requirements[]` | pre/post netlist | 执行或调用 LEC | 功能模式等价 |
 
+插链入口的互斥规则：
+
+- `scan.insert` 是一次性复合入口，表示由工具完成 cell replacement 与 chain stitching。
+- `scan.replace_cells` 与 `scan.stitch_chains` 是分步入口，按此顺序执行。
+- 同一次运行只能选择一种入口：要么单独 `scan.insert`，要么
+  `scan.replace_cells` 后接 `scan.stitch_chains`；不得同时提交 `scan.insert`
+  与任一原子动作。
+
 ## 6. 参数冲突与缺省规则
 
 ### 6.1 链数与链长
 
+`internal_scan.chain_length` 的语义**唯一**：固定链长，即每条链恰好为该长度。
+最大长度、目标长度、推荐长度和均衡长度属于不同语义，当前公共接口无法表达，
+必须按 `docs/task_requirement_mapping.md` §8.5 / §8.7 写入
+`unresolved_requirements`，不得写入 `chain_length`。
+
 - 只给 `chain_count`：以链数为硬约束，链长由工具平衡。
 - 只给 `chain_length`：先依据可扫描单元数推导所需链数，再由报告复核。
-- 两者都给：先检查 `scan_cell_count <= chain_count × chain_length`；不满足时阻止生成。
+- 两者都给：生成前执行**容量预检** `scan_cell_count <= chain_count × chain_length`；
+  不满足说明参数组合不可能成立，阻止生成 Dofile。
 - 两者都没给：不得凭经验写死，保留为待决策项或使用比赛明确提供的默认值。
+
+容量预检不是长度验收：
+
+- `scan_cell_count <= chain_count × chain_length` 只回答“这些参数有没有可能成立”，
+  不能证明任意一条链的长度正确。反例：要求 3 条链、每条固定 3，实际得到
+  2/4/3，容量不等式成立，但固定长度要求已被违反。
+- 长度验收必须**逐链**进行：从 scan-chain 报告读取每条链的实际长度，逐条与
+  `chain_length` 比对，任一条不等即为失败。
+- 同时必须按 `docs/dft_output.md` §5.2 检查链长分布、空链和断链，不得只比较总链数。
 
 ### 6.2 unknown、null 与 false
 
@@ -320,6 +351,20 @@ Task 2 以 `original_dofile` 为基线：
 修复：只更新 `scan.set_chain_count` 对应命令。
 
 复验：新运行报告显示 8 条链，同时 DRC、LEC 和其他已满足约束没有回归。
+
+最小修改约束：
+
+1. **输入**：`CaseInput.original_dofile` 是基线 dofile，必须原样保存，不得覆盖。
+2. **差异**：修复只允许改动与根因对应的动作参数；每个改动必须能由
+   `IssueResolution.diagnosis.root_cause` 和 `IssueFix.action` 解释。
+3. **产物**：`IssueFix.artifact_ref` 至少包含新的 dofile（类型为 `List[str]`，
+   可包含配置或补丁文件）；Runtime 必须逐个校验文件存在。
+4. **禁止**：不得整份重写 dofile、不得删除已满足的配置、不得用 golden dofile
+   替换基线、不得改动无关动作。
+5. **复验**：`IssueVerify.run_ref` 必须指向新的 `ToolRunResult`；验收至少包括
+   目标问题消失、DRC 无新增阻断、LEC/结构检查无回归、其余硬约束仍满足。
+6. **失败处理**：复验失败时保留本次尝试（追加到 `attempts`），不得覆盖之前的
+   证据，也不得把失败的运行标记为 `resolved=true`。
 
 ## 10. 厂商命令核验流程
 
