@@ -148,6 +148,26 @@ def test_top_design_without_name_is_unresolved():
     )
 
 
+def test_reverse_style_signal_expressions():
+    requirement = TaskParser().parse(
+        "clk_a、clk_b 均作为 Scan Clock。"
+        "rst_n 和 por_n 均作为复位信号。"
+        "scan_en 作为扫描使能信号。"
+    )
+
+    assert requirement.test_clocks == ["clk_a", "clk_b"]
+    assert requirement.resets == ["rst_n", "por_n"]
+    assert requirement.scan_enable == "scan_en"
+
+
+def test_wrapper_scope_from_enable_sentence():
+    requirement = TaskParser().parse("对 core0 和 core1 启用 Wrapper Scan。")
+
+    assert requirement.wrapper_scan.enabled is True
+    assert requirement.wrapper_scan.scope == ["core0", "core1"]
+    assert requirement.unresolved_requirements == []
+
+
 def test_parse_file_matches_parse_text():
     requirement = TaskParser().parse_file(
         str(FIXTURE_DIR / "basic_internal_scan.md")
