@@ -1,51 +1,83 @@
 # Scan Insertion Agent
 
-面向 Scan Insertion 竞赛场景的模块化 Agent 项目。系统读取比赛 case，解析 DFT 约束，驱动官方工具执行，并通过“发现—诊断—修复—验证”闭环产出可审计的结果。
+LLM-based autonomous Scan Insertion agent for the EDA Elite Challenge 2026
+(广立微 Scan Insertion track).
 
-## 当前阶段
+## What is implemented
 
-- 已建立 Python 项目骨架和公共 Pydantic 数据契约。
-- 已建立 DFT 流程、核心概念、输出要求和接口说明文档。
-- Agent、Runtime、诊断与修复模块仍在后续分支中实现。
+- **A / DFT Flow** — Action IR 0.2.0 catalog, TaskRequirement → Action plan,
+  Dofile renderer, DRC rule catalog, limitations parsing, Dofile patching.
+- **B / Agent** — deterministic Task Parser, DeepSeek/Bailian LLM client,
+  local manual RAG, state machine, budgets, log/DRC/scan-chain/wrapper
+  diagnosis, deterministic repair, full orchestration loop.
+- **C / Runtime** — case loader, run directory manager, tool runner,
+  `ToolRunResult` collection, decision log, diffs, Yosys EQY interface,
+  Docker entry point.
 
-## 目录结构
+## Quick start (mock mode, no DFTEXP required)
 
-| 路径 | 说明 |
-| --- | --- |
-| `src/contracts/` | 全组共享的数据模型与接口契约 |
-| `src/task_parser/` | 将自然语言任务要求解析为结构化约束 |
-| `src/tool_runner/` | 调用 Scan Insertion 工具并收集结果 |
-| `src/diagnosis/` | 根据日志、报告和约束定位问题 |
-| `src/repair/` | 生成修复动作并组织复验 |
-| `src/audit/` | 保存证据链和决策记录 |
-| `docs/` | DFT 知识库和接口说明 |
-| `tests/` | 自动化测试 |
+```bash
+pip install -r requirements-dev.txt
 
-## 文档索引
-
-- [`docs/dft_flow.md`](docs/dft_flow.md)：端到端 DFT 工作流和阶段门禁。
-- [`docs/dft_concepts.md`](docs/dft_concepts.md)：Scan Insertion 核心概念与诊断要点。
-- [`docs/dofile_mapping.md`](docs/dofile_mapping.md)：自然语言、公共模型、DFT 动作与 Dofile 的映射规范。
-- [`docs/dft_output.md`](docs/dft_output.md)：工具输出、交付物和验收标准。
-- [`docs/interfaces.md`](docs/interfaces.md)：模块边界和公共数据模型。
-
-## 本地环境
-
-建议使用 Python 3.10 或更高版本：
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m pytest
+python -m src.cli \
+  -input examples/public_case_demo \
+  -output /tmp/out_case \
+  --mock-tool --mock-llm
 ```
 
-## 分支协作
+A runnable demo case can be created from `examples/task_specs/`; the test
+suite builds its own cases.
 
-- `main`：稳定版本。
-- `dev`：团队集成分支。
-- `feature/dft-flow`：DFT 流程和知识库。
-- `feature/agent`：任务解析、诊断和决策逻辑。
-- `feature/runtime`：case 加载、工具调用、文件持久化和审计。
+## Tests
 
-功能分支应从最新 `dev` 创建，通过 Pull Request 合并回 `dev`。`src/contracts/` 是公共接口；字段变更需要先由模块负责人确认，并同步更新接口文档和测试。
+```bash
+pytest
+```
+
+The suite covers:
+
+- Task Parser acceptance fixtures and the six static-review edge cases;
+- Action catalog/planner/renderer;
+- Runtime, decision-log validation and diffs;
+- Diagnosis and repair;
+- End-to-end Task 1 and Task 2 mock runs, including chain-count,
+  invalid-parameter, DRC and wrapper-scope repair.
+
+## Official mode
+
+The official DFTEXP command syntax and manual are not present in this
+repository. Before a real submission:
+
+1. fill `configs/dft_tool_templates.yaml` with verified command templates;
+2. set `dft.dofile_mode: strict`;
+3. set `tool.mode: real` and fill `tool.command`;
+4. set `lec.mode: real` and ensure `eqy` is installed;
+5. place the official manual under `manual/`;
+6. set `DASHSCOPE_API_KEY` in the evaluation environment.
+
+See `docs/competition_compliance.md` for the exact status of every official
+requirement and the remaining gaps.
+
+## Layout
+
+```text
+src/task_parser/     B: natural-language task parser
+src/dft_flow/        A: Action IR, planner, Dofile renderer, DRC rules
+src/agent/           B: LLM, RAG, diagnosis, repair, orchestration
+src/case/            C: case loader
+src/runtime/         C: run directories and final publication
+src/tool_runner/     C: official tool wrapper + deterministic mock tool
+src/audit/           C: decision log, diffs
+src/lec/             C: Yosys EQY interface
+configs/             runtime configuration
+schemas/             Action IR schema
+docs/                architecture and compliance documents
+manual/              place the official DFTEXP manual here
+```
+
+## Honesty note
+
+Mock mode is explicitly separate from real mode. The Agent never fabricates
+tool logs, reports or deliverables. If a verified command template, the
+official tool, or a required LEC is missing, the run is marked blocked or
+failed rather than reported as successful.

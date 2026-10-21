@@ -1,0 +1,13 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+tests
+runs
+final_results
+diffs
+tmp_*
+output*
+*.log

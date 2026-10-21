@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Official invocation shape:
+#   /submission/agent_system -input /work/input/hidden_case_1 \
+#                            -output /work/output/hidden_case_1
+set -eu
+exec python -m src.cli "$@"
